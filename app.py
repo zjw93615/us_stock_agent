@@ -14,13 +14,27 @@ load_dotenv()
 # 创建Flask应用
 app = Flask(__name__)
 
+# 读取应用配置
+flask_env = os.getenv("FLASK_ENV", "development")
+flask_debug = os.getenv("FLASK_DEBUG", "True").lower() == "true"
+flask_port = int(os.getenv("FLASK_PORT", "5000"))
+openai_model = os.getenv("OPENAI_MODEL", "qwen-flash")
+news_api_key = os.getenv("NEWS_API_KEY")
+
+# 配置Flask应用
+app.config['ENV'] = flask_env
+app.config['DEBUG'] = flask_debug
+
+logger.info(f"Flask应用配置: ENV={flask_env}, DEBUG={flask_debug}, PORT={flask_port}")
+logger.info(f"使用模型: {openai_model}")
+
 # 创建Agent实例
 openai_api_key = os.getenv("OPENAI_API_KEY")
 if not openai_api_key:
     logger.error("请确保设置了OPENAI_API_KEY环境变量")
     raise ValueError("缺少OPENAI_API_KEY环境变量")
 
-agent = LLMStockAgent(news_api_key=None, model_name="qwen-flash")
+agent = LLMStockAgent(news_api_key=news_api_key, model_name=openai_model)
 
 @app.route('/')
 def index():
@@ -266,4 +280,5 @@ def stream():
     return Response(generate(), mimetype='application/x-ndjson')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    logger.info(f"启动Flask应用，监听端口: {flask_port}")
+    app.run(debug=flask_debug, port=flask_port, host='0.0.0.0')
