@@ -1,0 +1,23 @@
+# Web框架
+flask==3.1.2
+
+# 数据处理
+pandas==2.2.0
+numpy==1.26.4
+
+# 股票数据
+yfinance==0.2.36
+
+# 图表生成
+matplotlib==3.10.6
+
+# API客户端
+requests==2.31.0
+openai==1.14.0
+
+# 工具库
+python-dotenv==1.0.1
+python-dateutil==2.9.0
+
+# 日志和调试
+colorlog==6.8.2

@@ -126,7 +126,7 @@ class LLMStockAgent:
                 "error": str(e)
             }
     
-    def analyze(self, user_query: str, max_steps: int = 5) -> Dict[str, Any]:
+    def analyze(self, user_query: str, max_steps: int = 5, step_callback=None) -> Dict[str, Any]:
         """处理用户查询，进行分析"""
         logger.info(f"开始分析用户查询: {user_query}")
         self.conversation_history.append({"role": "user", "content": user_query})
@@ -148,10 +148,25 @@ class LLMStockAgent:
             self.conversation_history.append({"role": "assistant", "content": llm_response})
             
             # 记录步骤
-            steps.append({
+            step_data = {
                 "step": step + 1,
                 "llm_response": llm_response
-            })
+            }
+            steps.append(step_data)
+            
+            # 实时发送思考过程
+            if step_callback:
+                # 提取不包含工具调用标记的部分
+                clean_response = llm_response
+                tool_call_start = clean_response.find('<tool_call>')
+                if tool_call_start != -1:
+                    clean_response = clean_response[:tool_call_start].strip()
+                
+                if clean_response.strip():
+                    step_callback({
+                        "type": "thinking",
+                        "content": f"💭 步骤 {step+1}: {clean_response}"
+                    })
             
             # 检查是否包含工具调用
             tool_call = self._parse_tool_call(llm_response)
@@ -164,9 +179,53 @@ class LLMStockAgent:
             
             # 执行工具调用
             logger.info(f"检测到工具调用: {tool_call['name'] if tool_call else 'None'}")
+            
+            # 实时发送工具调用信息
+            if step_callback and tool_call:
+                tool_name = tool_call.get("name", "未知工具")
+                tool_params = tool_call.get("parameters", {})
+                
+                # 根据工具类型生成描述
+                if tool_name == "get_historical_data":
+                    ticker = tool_params.get("ticker", "")
+                    step_callback({
+                        "type": "tool",
+                        "content": f"📊 正在获取 {ticker} 的历史数据..."
+                    })
+                elif tool_name == "get_financial_statements":
+                    ticker = tool_params.get("ticker", "")
+                    step_callback({
+                        "type": "tool",
+                        "content": f"📈 正在获取 {ticker} 的财务报表..."
+                    })
+                elif tool_name == "get_stock_news":
+                    ticker = tool_params.get("ticker", "")
+                    step_callback({
+                        "type": "tool",
+                        "content": f"📰 正在获取 {ticker} 的最新新闻..."
+                    })
+                elif tool_name == "calculate_technical_indicators":
+                    ticker = tool_params.get("ticker", "")
+                    step_callback({
+                        "type": "tool",
+                        "content": f"📉 正在计算 {ticker} 的技术指标..."
+                    })
+                else:
+                    step_callback({
+                        "type": "tool",
+                        "content": f"🔧 正在调用工具: {tool_name}"
+                    })
+            
             tool_result = self._run_tool(tool_call)
             steps[-1]["tool_call"] = tool_call
             steps[-1]["tool_result"] = tool_result
+            
+            # 发送工具执行完成信息
+            if step_callback:
+                step_callback({
+                    "type": "thinking",
+                    "content": "✅ 工具执行完成，正在分析结果..."
+                })
             
             # 将工具结果返回给大模型
             # 处理可能包含Timestamp类型键的字典
@@ -185,6 +244,34 @@ class LLMStockAgent:
             tool_result_msg = f"工具调用结果:\n{json.dumps(serializable_result, indent=2)}"
             logger.debug(f"工具调用结果: {json.dumps(serializable_result)}")
             self.conversation_history.append({"role": "user", "content": tool_result_msg})
+        
+        # 如果达到最大步数但还没有最终分析，请求一个总结
+        if final_analysis is None:
+            logger.info("达到最大步数限制，请求最终分析总结")
+            summary_prompt = "请基于以上所有信息，提供一个完整的分析总结和投资建议。不要再调用任何工具。"
+            self.conversation_history.append({"role": "user", "content": summary_prompt})
+            
+            response = self.openai_client.chat.completions.create(
+                model=self.model_name,
+                messages=self.conversation_history
+            )
+            
+            final_analysis = response.choices[0].message.content
+            logger.info("生成最终分析总结完成")
+            
+            # 记录最终总结步骤
+            steps.append({
+                "step": len(steps) + 1,
+                "llm_response": final_analysis,
+                "is_final_summary": True
+            })
+        
+        # 发送最终分析结果
+        if step_callback and final_analysis:
+            step_callback({
+                "type": "final",
+                "content": final_analysis
+            })
         
         return {
             "query": user_query,

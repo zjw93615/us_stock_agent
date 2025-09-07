@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票分析助手</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- 侧边栏 -->
+            <div class="col-md-3 sidebar">
+                <div class="sidebar-header">
+                    <h3>股票分析助手</h3>
+                    <p class="text-muted">基于AI的股票分析工具</p>
+                </div>
+                <div class="sidebar-content">
+                    <div class="quick-actions">
+                        <h5>快速查询</h5>
+                        <div class="list-group">
+                            <button class="list-group-item list-group-item-action" onclick="setQuery('分析一下苹果公司(AAPL)最近三个月的股票表现')">
+                                分析苹果公司(AAPL)最近三个月表现
+                            </button>
+                            <button class="list-group-item list-group-item-action" onclick="setQuery('比较微软(MSFT)和谷歌(GOOGL)的财务状况')">
+                                比较微软和谷歌的财务状况
+                            </button>
+                            <button class="list-group-item list-group-item-action" onclick="setQuery('分析特斯拉(TSLA)的技术指标和未来趋势')">
+                                分析特斯拉的技术指标和趋势
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 主内容区 -->
+            <div class="col-md-9 main-content">
+                <div class="chat-container">
+                    <div id="chat-messages" class="chat-messages">
+                        <!-- 欢迎消息 -->
+                        <div class="message system-message">
+                            <div class="message-content">
+                                <p>欢迎使用股票分析助手！请输入您的查询，例如：</p>
+                                <ul>
+                                    <li>分析一下苹果公司(AAPL)最近三个月的股票表现</li>
+                                    <li>比较微软(MSFT)和谷歌(GOOGL)的财务状况</li>
+                                    <li>分析特斯拉(TSLA)的技术指标和未来趋势</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 可视化区域 -->
+                    <div id="visualization-area" class="visualization-area d-none">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">数据可视化</h5>
+                                <button type="button" class="btn-close" onclick="hideVisualization()"></button>
+                            </div>
+                            <div class="card-body">
+                                <div id="chart-container"></div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 输入区域 -->
+                    <div class="input-area">
+                        <form id="query-form" class="d-flex">
+                            <input type="text" id="query-input" class="form-control" placeholder="输入您的股票分析查询..." required>
+                            <button type="submit" class="btn btn-primary ms-2">
+                                <i class="bi bi-send"></i>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 加载脚本 -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

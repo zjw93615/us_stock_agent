@@ -75,10 +75,10 @@ class NewsTool(Tool):
     def __init__(self, api_key: str = None):
         # GNews不需要API密钥，但保留参数以兼容现有代码
         super().__init__(
-            name="get_stock_news",
-            description="获取与特定股票相关的新闻 articles",
+            name="get_news",
+            description="获取相关的新闻 articles",
             parameters={
-                "query": {"type": "str", "description": "搜索关键词，通常是股票代码或公司名称"},
+                "query": {"type": "str", "description": "搜索关键词，通常是股票相关的消息或是希望查询的新闻内容"},
                 "from_date": {"type": "str", "description": "开始日期，格式YYYY-MM-DD"},
                 "to_date": {"type": "str", "description": "结束日期，格式YYYY-MM-DD"}
             }
@@ -96,10 +96,16 @@ class NewsTool(Tool):
             # 设置语言和国家/地区
             google_news.language = 'en'
             google_news.country = 'US'  # 美国新闻源
-            
-            # 设置时间范围（GNews使用的是相对时间，这里我们尽量匹配原来的功能）
-            # 注意：GNews不支持精确的日期范围，只支持相对时间段
             google_news.period = '7d'  # 默认为7天内的新闻
+            google_news.max_results = 20  # number of responses across a keyword
+            # if(from_date and to_date):
+            #     from datetime import datetime
+            #     from_date_obj = datetime.strptime(from_date, "%Y-%m-%d")
+            #     to_date_obj = datetime.strptime(to_date, "%Y-%m-%d")
+            #     google_news.start_date = (from_date_obj.year, from_date_obj.month, from_date_obj.day)
+            #     google_news.end_date = (to_date_obj.year, to_date_obj.month, to_date_obj.day)
+            # else:
+            #     google_news.period = '7d'  # 默认为7天内的新闻
             logger.debug(f"GNews配置: 语言={google_news.language}, 国家={google_news.country}, 时间段={google_news.period}")
             
             # 获取新闻
@@ -177,7 +183,7 @@ class ToolManager:
         self.tools = {
             "get_historical_data": HistoricalDataTool(),
             "get_financial_statements": FinancialStatementsTool(),
-            "get_stock_news": NewsTool(news_api_key),
+            "get_news": NewsTool(news_api_key),
             "calculate_technical_indicators": TechnicalAnalysisTool()
         }
         logger.info(f"已注册{len(self.tools)}个工具: {', '.join(self.tools.keys())}")
