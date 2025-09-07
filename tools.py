@@ -33,11 +33,39 @@ class HistoricalDataTool(Tool):
         # 实际实现中调用之前的StockDataFetcher
         logger.info(f"获取历史数据: 股票={ticker}, 开始日期={start_date}, 结束日期={end_date}")
         import yfinance as yf
+        import pandas as pd
         stock = yf.Ticker(ticker)
         try:
             hist = stock.history(start=start_date, end=end_date)
             logger.info(f"成功获取{ticker}的历史数据，记录数: {len(hist)}")
-            return hist.to_dict()
+            
+            # 精简数据：只返回关键统计信息和最近几天的数据
+            if len(hist) == 0:
+                return {"error": "未获取到数据"}
+            
+            # 计算关键统计信息
+            summary = {
+                "period_summary": {
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "total_days": len(hist),
+                    "current_price": float(hist['Close'].iloc[-1]),
+                    "period_high": float(hist['High'].max()),
+                    "period_low": float(hist['Low'].min()),
+                    "period_return": float((hist['Close'].iloc[-1] / hist['Close'].iloc[0] - 1) * 100),
+                    "avg_volume": float(hist['Volume'].mean()),
+                    "volatility": float(hist['Close'].pct_change().std() * 100)
+                },
+                "recent_data": {
+                    # 只返回最近5天的详细数据
+                    "dates": [str(date.date()) for date in hist.index[-5:]],
+                    "close_prices": [float(price) for price in hist['Close'].tail(5)],
+                    "volumes": [int(vol) for vol in hist['Volume'].tail(5)]
+                }
+            }
+            
+            logger.info(f"已精简{ticker}的历史数据，减少token消耗")
+            return summary
         except Exception as e:
             logger.error(f"获取历史数据失败: {str(e)}")
             raise
@@ -57,14 +85,55 @@ class FinancialStatementsTool(Tool):
         # 实际实现中调用之前的StockDataFetcher
         logger.info(f"获取财务报表: 股票={ticker}")
         import yfinance as yf
+        import pandas as pd
         stock = yf.Ticker(ticker)
         try:
+            # 获取原始财务数据
+            balance_sheet = stock.balance_sheet
+            income_stmt = stock.income_stmt
+            cash_flow = stock.cashflow
+            info = stock.info
+            
+            # 精简财务数据：只提取关键指标
             result = {
-                "balance_sheet": stock.balance_sheet.to_dict(),
-                "income_stmt": stock.income_stmt.to_dict(),
-                "cash_flow": stock.cashflow.to_dict()
+                "key_metrics": {
+                    # 基本信息
+                    "market_cap": info.get('marketCap', 'N/A'),
+                    "pe_ratio": info.get('trailingPE', 'N/A'),
+                    "pb_ratio": info.get('priceToBook', 'N/A'),
+                    "dividend_yield": info.get('dividendYield', 'N/A'),
+                    "debt_to_equity": info.get('debtToEquity', 'N/A'),
+                    "roe": info.get('returnOnEquity', 'N/A'),
+                    "profit_margin": info.get('profitMargins', 'N/A')
+                },
+                "recent_financials": {}
             }
-            logger.info(f"成功获取{ticker}的财务报表")
+            
+            # 从财务报表中提取关键数据（最近一期）
+            if not income_stmt.empty:
+                latest_income = income_stmt.iloc[:, 0]  # 最新一期数据
+                result["recent_financials"].update({
+                    "total_revenue": float(latest_income.get('Total Revenue', 0)) if pd.notna(latest_income.get('Total Revenue', 0)) else 0,
+                    "net_income": float(latest_income.get('Net Income', 0)) if pd.notna(latest_income.get('Net Income', 0)) else 0,
+                    "gross_profit": float(latest_income.get('Gross Profit', 0)) if pd.notna(latest_income.get('Gross Profit', 0)) else 0
+                })
+            
+            if not balance_sheet.empty:
+                latest_balance = balance_sheet.iloc[:, 0]  # 最新一期数据
+                result["recent_financials"].update({
+                    "total_assets": float(latest_balance.get('Total Assets', 0)) if pd.notna(latest_balance.get('Total Assets', 0)) else 0,
+                    "total_debt": float(latest_balance.get('Total Debt', 0)) if pd.notna(latest_balance.get('Total Debt', 0)) else 0,
+                    "shareholders_equity": float(latest_balance.get('Stockholders Equity', 0)) if pd.notna(latest_balance.get('Stockholders Equity', 0)) else 0
+                })
+            
+            if not cash_flow.empty:
+                latest_cashflow = cash_flow.iloc[:, 0]  # 最新一期数据
+                result["recent_financials"].update({
+                    "operating_cash_flow": float(latest_cashflow.get('Operating Cash Flow', 0)) if pd.notna(latest_cashflow.get('Operating Cash Flow', 0)) else 0,
+                    "free_cash_flow": float(latest_cashflow.get('Free Cash Flow', 0)) if pd.notna(latest_cashflow.get('Free Cash Flow', 0)) else 0
+                })
+            
+            logger.info(f"成功获取并精简{ticker}的财务数据，减少token消耗")
             return result
         except Exception as e:
             logger.error(f"获取财务报表失败: {str(e)}")
@@ -140,7 +209,7 @@ class TechnicalAnalysisTool(Tool):
     def __init__(self):
         super().__init__(
             name="calculate_technical_indicators",
-            description="计算股票的技术指标，如移动平均线、RSI、MACD等",
+            description="计算股票的技术指标，包括移动平均线、RSI、MACD、布林带、KDJ等常用指标",
             parameters={
                 "ticker": {"type": "str", "description": "股票代码，如AAPL"},
                 "start_date": {"type": "str", "description": "开始日期，格式YYYY-MM-DD"},
@@ -153,24 +222,86 @@ class TechnicalAnalysisTool(Tool):
         import yfinance as yf
         import talib
         import pandas as pd
+        import numpy as np
         
         try:
             stock = yf.Ticker(ticker)
             df = stock.history(start=start_date, end=end_date)
             logger.debug(f"成功获取{ticker}的历史数据，记录数: {len(df)}")
             
-            result = {}
-            # 计算技术指标
-            logger.debug("开始计算技术指标: SMA50, SMA200, RSI, MACD")
-            result['SMA50'] = pd.Series(talib.SMA(df['Close'], timeperiod=50)).to_dict()
-            result['SMA200'] = pd.Series(talib.SMA(df['Close'], timeperiod=200)).to_dict()
-            result['RSI'] = pd.Series(talib.RSI(df['Close'], timeperiod=14)).to_dict()
+            if len(df) < 50:  # 确保有足够的数据计算指标
+                return {"error": "数据不足，无法计算技术指标"}
             
+            # 只返回最新的指标值，减少token消耗
+            result = {
+                "current_price": float(df['Close'].iloc[-1]),
+                "indicators": {}
+            }
+            
+            # 移动平均线
+            sma5 = talib.SMA(df['Close'], timeperiod=5)
+            sma20 = talib.SMA(df['Close'], timeperiod=20)
+            sma50 = talib.SMA(df['Close'], timeperiod=50)
+            sma200 = talib.SMA(df['Close'], timeperiod=200)
+            
+            result['indicators']['moving_averages'] = {
+                "SMA5": float(sma5.iloc[-1]) if not pd.isna(sma5.iloc[-1]) else None,
+                "SMA20": float(sma20.iloc[-1]) if not pd.isna(sma20.iloc[-1]) else None,
+                "SMA50": float(sma50.iloc[-1]) if not pd.isna(sma50.iloc[-1]) else None,
+                "SMA200": float(sma200.iloc[-1]) if not pd.isna(sma200.iloc[-1]) else None
+            }
+            
+            # RSI
+            rsi = talib.RSI(df['Close'], timeperiod=14)
+            result['indicators']['RSI'] = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else None
+            
+            # MACD
             macd, macd_signal, macd_hist = talib.MACD(df['Close'])
-            result['MACD'] = pd.Series(macd).to_dict()
-            result['MACD_signal'] = pd.Series(macd_signal).to_dict()
+            result['indicators']['MACD'] = {
+                "MACD": float(macd.iloc[-1]) if not pd.isna(macd.iloc[-1]) else None,
+                "Signal": float(macd_signal.iloc[-1]) if not pd.isna(macd_signal.iloc[-1]) else None,
+                "Histogram": float(macd_hist.iloc[-1]) if not pd.isna(macd_hist.iloc[-1]) else None
+            }
             
-            logger.info(f"成功计算{ticker}的技术指标")
+            # 布林带
+            bb_upper, bb_middle, bb_lower = talib.BBANDS(df['Close'], timeperiod=20)
+            result['indicators']['Bollinger_Bands'] = {
+                "Upper": float(bb_upper.iloc[-1]) if not pd.isna(bb_upper.iloc[-1]) else None,
+                "Middle": float(bb_middle.iloc[-1]) if not pd.isna(bb_middle.iloc[-1]) else None,
+                "Lower": float(bb_lower.iloc[-1]) if not pd.isna(bb_lower.iloc[-1]) else None
+            }
+            
+            # KDJ指标
+            slowk, slowd = talib.STOCH(df['High'], df['Low'], df['Close'])
+            result['indicators']['KDJ'] = {
+                "K": float(slowk.iloc[-1]) if not pd.isna(slowk.iloc[-1]) else None,
+                "D": float(slowd.iloc[-1]) if not pd.isna(slowd.iloc[-1]) else None,
+                "J": float(3 * slowk.iloc[-1] - 2 * slowd.iloc[-1]) if not pd.isna(slowk.iloc[-1]) and not pd.isna(slowd.iloc[-1]) else None
+            }
+            
+            # 威廉指标
+            willr = talib.WILLR(df['High'], df['Low'], df['Close'], timeperiod=14)
+            result['indicators']['Williams_R'] = float(willr.iloc[-1]) if not pd.isna(willr.iloc[-1]) else None
+            
+            # CCI指标
+            cci = talib.CCI(df['High'], df['Low'], df['Close'], timeperiod=14)
+            result['indicators']['CCI'] = float(cci.iloc[-1]) if not pd.isna(cci.iloc[-1]) else None
+            
+            # 成交量指标
+            result['indicators']['volume'] = {
+                "current_volume": int(df['Volume'].iloc[-1]),
+                "avg_volume_20": float(df['Volume'].tail(20).mean()),
+                "volume_ratio": float(df['Volume'].iloc[-1] / df['Volume'].tail(20).mean())
+            }
+            
+            # 价格趋势分析
+            result['indicators']['trend_analysis'] = {
+                "price_above_sma20": float(df['Close'].iloc[-1]) > float(sma20.iloc[-1]) if not pd.isna(sma20.iloc[-1]) else None,
+                "price_above_sma50": float(df['Close'].iloc[-1]) > float(sma50.iloc[-1]) if not pd.isna(sma50.iloc[-1]) else None,
+                "sma20_above_sma50": float(sma20.iloc[-1]) > float(sma50.iloc[-1]) if not pd.isna(sma20.iloc[-1]) and not pd.isna(sma50.iloc[-1]) else None
+            }
+            
+            logger.info(f"成功计算{ticker}的技术指标，已精简数据")
             return result
         except Exception as e:
             logger.error(f"计算技术指标失败: {str(e)}")

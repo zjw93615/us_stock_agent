@@ -33,22 +33,38 @@ class LLMStockAgent:
         from datetime import datetime
         current_date = datetime.now().strftime("%Y-%m-%d")
         
-        return f"""你是一个专业的股票分析AI助手，能够分析股票数据并提供投资见解。
+        return f"""你是一个专业的股票分析AI助手，专注于基于真实数据的客观分析。
 
 今天的日期是: {current_date}
 
-你可以使用以下工具来获取所需的数据：
+**核心原则：**
+1. 只基于工具返回的真实数据进行分析，绝不编造数据
+2. 明确区分事实和推测，避免过度解读
+3. 承认数据局限性，不做绝对预测
+4. 提供风险提示和免责声明
 
+**可用工具：**
 {tool_descriptions}
 
-你的工作流程：
-1. 分析用户的问题，确定需要哪些数据
-2. 选择合适的工具获取所需数据
-3. 如果已有数据不足以回答问题，继续调用其他必要的工具
-4. 基于所有获取的数据，提供全面、深入的分析
+**分析框架：**
+1. **数据收集阶段**：
+   - 明确用户需求，确定所需数据类型
+   - 系统性收集相关数据（价格、财务、技术指标、新闻）
+   - 验证数据完整性和时效性
 
-调用工具的格式：
-当你需要调用工具时，请使用以下格式包裹内容：
+2. **客观分析阶段**：
+   - 技术面：基于指标数值进行趋势判断
+   - 基本面：基于财务数据评估公司健康度
+   - 市场情绪：基于新闻内容分析市场预期
+   - 风险评估：识别潜在风险因素
+
+3. **结论表述**：
+   - 明确标注数据来源和时间
+   - 区分"数据显示"和"可能意味着"
+   - 提供多种情景分析
+   - 强调投资风险和不确定性
+
+**工具调用格式：**
 <tool_call>
 {{
   "name": "工具名称",
@@ -59,13 +75,15 @@ class LLMStockAgent:
 }}
 </tool_call>
 
-注意事项：
-- 只在需要获取数据时调用工具
-- 确保提供工具所需的所有必要参数
-- 调用工具后，根据返回结果决定是否需要进一步调用其他工具
-- 最终分析应基于所有获取的数据，用自然语言清晰表达
-- 分析应包括技术面分析、基本面分析和新闻情感分析（如适用）
-- 明确说明分析的局限性和潜在风险
+**严格要求：**
+- 禁止编造任何数据或指标值
+- 如果工具返回错误或空数据，必须如实说明
+- 不得对股价做出具体的涨跌预测
+- 必须在分析结尾包含风险提示
+- 承认分析的局限性和时效性
+
+**标准结尾模板：**
+"以上分析基于{{数据时间}}的公开数据，仅供参考。股市投资存在风险，过往表现不代表未来结果。投资者应结合自身情况谨慎决策，必要时咨询专业投资顾问。"
 """
     
     def _parse_tool_call(self, response: str) -> Optional[Dict[str, Any]]:
@@ -91,7 +109,7 @@ class LLMStockAgent:
             return None
     
     def _run_tool(self, tool_call: Dict[str, Any]) -> Dict[str, Any]:
-        """执行工具调用"""
+        """执行工具调用并验证数据质量"""
         tool_name = tool_call.get("name")
         parameters = tool_call.get("parameters", {})
         
@@ -109,22 +127,101 @@ class LLMStockAgent:
         
         try:
             logger.info(f"开始执行工具: {tool_name}")
-            result = tool.run(** parameters)
-            logger.info(f"工具 {tool_name} 执行成功")
-            return {
-                "status": "success",
-                "tool": tool_name,
-                "parameters": parameters,
-                "result": result
-            }
+            result = tool.run(**parameters)
+            
+            # 数据验证和质量检查
+            validated_result = self._validate_tool_result(tool_name, result, parameters)
+            return validated_result
         except Exception as e:
             logger.error(f"工具 {tool_name} 执行失败: {str(e)}")
             return {
                 "status": "error",
                 "tool": tool_name,
                 "parameters": parameters,
-                "error": str(e)
+                "error": str(e),
+                "data_quality": "error"
             }
+    
+    def _validate_tool_result(self, tool_name: str, result: Any, parameters: Dict) -> Dict[str, Any]:
+        """验证工具返回结果的质量和完整性"""
+        validation_info = {
+            "status": "success",
+            "tool": tool_name,
+            "parameters": parameters,
+            "result": result,
+            "data_quality": "good",
+            "validation_notes": []
+        }
+        
+        try:
+            # 检查是否有错误
+            if isinstance(result, dict) and "error" in result:
+                validation_info["data_quality"] = "error"
+                validation_info["validation_notes"].append(f"工具返回错误: {result['error']}")
+                return validation_info
+            
+            # 根据工具类型进行特定验证
+            if tool_name == "get_historical_data":
+                if isinstance(result, dict):
+                    if "period_summary" in result:
+                        summary = result["period_summary"]
+                        if summary.get("total_days", 0) == 0:
+                            validation_info["data_quality"] = "poor"
+                            validation_info["validation_notes"].append("历史数据为空")
+                        elif summary.get("current_price") is None:
+                            validation_info["data_quality"] = "poor"
+                            validation_info["validation_notes"].append("缺少当前价格数据")
+                        else:
+                            validation_info["validation_notes"].append(f"获取到{summary.get('total_days', 0)}天的历史数据")
+            
+            elif tool_name == "get_financial_statements":
+                if isinstance(result, dict) and "key_metrics" in result:
+                    metrics = result["key_metrics"]
+                    available_metrics = [k for k, v in metrics.items() if v != 'N/A' and v is not None]
+                    if len(available_metrics) < 3:
+                        validation_info["data_quality"] = "poor"
+                        validation_info["validation_notes"].append("财务指标数据不完整")
+                    else:
+                        validation_info["validation_notes"].append(f"获取到{len(available_metrics)}个有效财务指标")
+            
+            elif tool_name == "get_stock_news":
+                if isinstance(result, list):
+                    if len(result) == 0:
+                        validation_info["data_quality"] = "poor"
+                        validation_info["validation_notes"].append("未找到相关新闻")
+                    else:
+                        validation_info["validation_notes"].append(f"获取到{len(result)}条新闻")
+            
+            elif tool_name == "calculate_technical_indicators":
+                if isinstance(result, dict) and "indicators" in result:
+                    indicators = result["indicators"]
+                    valid_indicators = 0
+                    for category, values in indicators.items():
+                        if isinstance(values, dict):
+                            valid_indicators += len([v for v in values.values() if v is not None])
+                        elif values is not None:
+                            valid_indicators += 1
+                    
+                    if valid_indicators < 5:
+                        validation_info["data_quality"] = "poor"
+                        validation_info["validation_notes"].append("技术指标数据不完整")
+                    else:
+                        validation_info["validation_notes"].append(f"计算出{valid_indicators}个有效技术指标")
+            
+            # 添加数据时效性检查
+            from datetime import datetime
+            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            validation_info["data_timestamp"] = current_time
+            validation_info["validation_notes"].append(f"数据获取时间: {current_time}")
+            
+            logger.info(f"工具{tool_name}数据验证完成，质量: {validation_info['data_quality']}")
+            return validation_info
+            
+        except Exception as e:
+            logger.error(f"数据验证失败: {str(e)}")
+            validation_info["data_quality"] = "unknown"
+            validation_info["validation_notes"].append(f"验证过程出错: {str(e)}")
+            return validation_info
     
     def analyze(self, user_query: str, max_steps: int = 5, step_callback=None) -> Dict[str, Any]:
         """处理用户查询，进行分析"""
@@ -198,7 +295,7 @@ class LLMStockAgent:
                         "type": "tool",
                         "content": f"📈 正在获取 {ticker} 的财务报表..."
                     })
-                elif tool_name == "get_stock_news":
+                elif tool_name == "get_news":
                     ticker = tool_params.get("ticker", "")
                     step_callback({
                         "type": "tool",
