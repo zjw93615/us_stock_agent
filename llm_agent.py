@@ -230,6 +230,7 @@ class LLMStockAgent:
         
         steps = []
         final_analysis = None
+        total_tokens_used = 0
         
         for step in range(max_steps):
             logger.info(f"执行分析步骤 {step+1}/{max_steps}")
@@ -240,14 +241,24 @@ class LLMStockAgent:
                 messages=self.conversation_history
             )
             
+            # 统计token使用量
+            step_tokens = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            }
+            total_tokens_used += step_tokens["total_tokens"]
+            
             llm_response = response.choices[0].message.content
+            logger.info(f"OpenAI API调用完成 - 步骤{step+1} Token使用: {step_tokens['prompt_tokens']} prompt + {step_tokens['completion_tokens']} completion = {step_tokens['total_tokens']} total")
             logger.debug(f"收到OpenAI响应: {llm_response}")
             self.conversation_history.append({"role": "assistant", "content": llm_response})
             
             # 记录步骤
             step_data = {
                 "step": step + 1,
-                "llm_response": llm_response
+                "llm_response": llm_response,
+                "token_usage": step_tokens
             }
             steps.append(step_data)
             
@@ -317,6 +328,17 @@ class LLMStockAgent:
             steps[-1]["tool_call"] = tool_call
             steps[-1]["tool_result"] = tool_result
             
+            # 记录工具调用的详细日志
+            tool_log_data = {
+                "tool_name": tool_call.get("name", "unknown"),
+                "tool_parameters": tool_call.get("parameters", {}),
+                "tool_execution_status": tool_result.get("status", "unknown"),
+                "data_quality": tool_result.get("data_quality", "unknown"),
+                "validation_notes": tool_result.get("validation_notes", []),
+                "tool_result": tool_result.get("result", {})
+            }
+            logger.info(f"工具调用详情: {json.dumps(tool_log_data, ensure_ascii=False, indent=2)}")
+            
             # 发送工具执行完成信息
             if step_callback:
                 step_callback({
@@ -353,13 +375,22 @@ class LLMStockAgent:
                 messages=self.conversation_history
             )
             
+            # 统计最终总结的token使用量
+            final_tokens = {
+                "prompt_tokens": response.usage.prompt_tokens,
+                "completion_tokens": response.usage.completion_tokens,
+                "total_tokens": response.usage.total_tokens
+            }
+            total_tokens_used += final_tokens["total_tokens"]
+            
             final_analysis = response.choices[0].message.content
-            logger.info("生成最终分析总结完成")
+            logger.info(f"最终分析总结完成 - Token使用: {final_tokens['prompt_tokens']} prompt + {final_tokens['completion_tokens']} completion = {final_tokens['total_tokens']} total")
             
             # 记录最终总结步骤
             steps.append({
                 "step": len(steps) + 1,
                 "llm_response": final_analysis,
+                "token_usage": final_tokens,
                 "is_final_summary": True
             })
         
@@ -370,9 +401,14 @@ class LLMStockAgent:
                 "content": final_analysis
             })
         
+        # 记录总体token使用统计
+        logger.info(f"分析完成 - 总Token消耗: {total_tokens_used} tokens，共执行{len(steps)}个步骤")
+        
         return {
             "query": user_query,
             "steps": steps,
             "final_analysis": final_analysis,
-            "completed": final_analysis is not None
+            "completed": final_analysis is not None,
+            "total_tokens_used": total_tokens_used,
+            "steps_count": len(steps)
         }
