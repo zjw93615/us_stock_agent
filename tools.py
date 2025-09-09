@@ -211,7 +211,7 @@ class NewsTool(Tool):
             parameters={
                 "query": {
                     "type": "str",
-                    "description": "搜索关键词，通常是股票相关的消息或是希望查询的新闻内容",
+                    "description": "搜索关键词，通常是股票相关的新闻或是希望查询的新闻内容",
                 },
                 "from_date": {"type": "str", "description": "开始日期，格式YYYY-MM-DD"},
                 "to_date": {"type": "str", "description": "结束日期，格式YYYY-MM-DD"},

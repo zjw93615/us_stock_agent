@@ -264,7 +264,7 @@ def stream():
                         news_api_key=None, model_name="qwen-flash"
                     )
                     result = stream_agent.analyze(
-                        user_query, max_steps=5, step_callback=step_callback
+                        user_query, max_steps=10, step_callback=step_callback
                     )
                     # 分析完成，发送结束信号
                     data_queue.put(None)
