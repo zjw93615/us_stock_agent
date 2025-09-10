@@ -1,11 +1,11 @@
 import os
 import json
+import re
 import time
 import requests
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 from datetime import datetime, timedelta
 from logger import get_logger
-import pandas as pd
 
 from tool_manager import Tool
 
