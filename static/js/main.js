@@ -211,8 +211,36 @@ function addMessage(type, content, thinkingProcess = null) {
     // 添加到聊天区域
     chatMessages.appendChild(messageDiv);
     
-    // 滚动到底部
-    scrollToBottom();
+    // 使用MathJax渲染数学公式
+    if (window.MathJax && window.MathJax.startup && window.MathJax.startup.document) {
+        // 确保MathJax已完全初始化
+        MathJax.startup.promise.then(() => {
+            return MathJax.typesetPromise([messageDiv]);
+        }).then(() => {
+            // 数学公式渲染完成后滚动到底部
+            scrollToBottom();
+        }).catch((err) => {
+            console.log('MathJax渲染错误:', err);
+            scrollToBottom();
+        });
+    } else if (window.MathJax) {
+        // 如果MathJax存在但未完全初始化，等待一段时间后重试
+        setTimeout(() => {
+            if (window.MathJax.typesetPromise) {
+                MathJax.typesetPromise([messageDiv]).then(() => {
+                    scrollToBottom();
+                }).catch((err) => {
+                    console.log('MathJax渲染错误:', err);
+                    scrollToBottom();
+                });
+            } else {
+                scrollToBottom();
+            }
+        }, 100);
+    } else {
+        // 如果MathJax未加载，直接滚动到底部
+        scrollToBottom();
+    }
 }
 
 /**

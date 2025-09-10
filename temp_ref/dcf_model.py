@@ -3,6 +3,11 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 
+import os
+proxy = "http://127.0.0.1:7890"
+os.environ['HTTP_PROXY'] = proxy
+os.environ['HTTPS_PROXY'] = proxy
+
 class DCFModel:
     def __init__(self, ticker):
         """初始化DCF模型，获取基本财务数据"""
@@ -209,12 +214,19 @@ if __name__ == "__main__":
     dcf = DCFModel(ticker)
     
     # 设定预测参数（需要根据行业研究和公司分析进行估算）
-    years = 5
-    growth_rates = [0.12, 0.10, 0.09, 0.08, 0.07]  # 收入增长率
-    profit_margins = [0.25, 0.24, 0.23, 0.22, 0.21]  # 净利润率
-    cap_ex_ratios = [0.06, 0.055, 0.05, 0.045, 0.04]  # 资本支出占收入比例
-    working_capital_changes = [0.02, 0.015, 0.01, 0.005, 0]  # 营运资本变动占收入比例
-    terminal_growth_rate = 0.025  # 终值增长率，通常接近长期GDP增长率
+    # years = 5
+    # growth_rates = [0.12, 0.10, 0.09, 0.08, 0.07]  # 收入增长率
+    # profit_margins = [0.25, 0.24, 0.23, 0.22, 0.21]  # 净利润率
+    # cap_ex_ratios = [0.06, 0.055, 0.05, 0.045, 0.04]  # 资本支出占收入比例
+    # working_capital_changes = [0.02, 0.015, 0.01, 0.005, 0]  # 营运资本变动占收入比例
+    # terminal_growth_rate = 0.025  # 终值增长率，通常接近长期GDP增长率
+    
+    years = 5  # 预测期保持5年，符合科技行业中期规划周期
+    growth_rates = [0.085, 0.075, 0.065, 0.055, 0.05]  # 收入增长率（逐年放缓）
+    profit_margins = [0.255, 0.252, 0.248, 0.245, 0.242]  # 净利润率（小幅波动下降）
+    cap_ex_ratios = [0.058, 0.055, 0.052, 0.05, 0.048]  # 资本支出占收入比例
+    working_capital_changes = [0.012, 0.008, 0.005, 0.003, 0.001]  # 营运资本变动比例
+    terminal_growth_rate = 0.022  # 终值增长率（略低于全球长期GDP增速）
     
     # 计算内在价值
     result = dcf.calculate_intrinsic_value(

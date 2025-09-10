@@ -3,7 +3,7 @@ import json
 from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 import openai
-from tools import ToolManager
+from tool_manager import ToolManager
 from logger import get_logger
 
 # 获取日志记录器
@@ -271,6 +271,22 @@ class LLMStockAgent:
                         {
                             "type": "tool",
                             "content": f"📉 正在计算 {ticker} 的技术指标...",
+                        }
+                    )
+                elif tool_name == "get_stock_info":
+                    ticker = tool_params.get("ticker", "")
+                    step_callback(
+                        {
+                            "type": "tool",
+                            "content": f"ℹ️ 正在获取 {ticker} 的基本信息...",
+                        }
+                    )
+                elif tool_name == "search_web_info":
+                    query = tool_params.get("query", "")
+                    step_callback(
+                        {
+                            "type": "tool",
+                            "content": f"🔍 正在搜索网络信息: {query}...",
                         }
                     )
                 else:

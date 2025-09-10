@@ -114,7 +114,7 @@ def visualization():
 
     try:
         # 获取股票历史数据
-        from tools import HistoricalDataTool, TechnicalAnalysisTool
+        from tool_manager import HistoricalDataTool, TechnicalAnalysisTool
         import pandas as pd
 
         # 如果未提供日期，使用默认值（最近3个月）
