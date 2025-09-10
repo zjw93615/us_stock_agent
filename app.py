@@ -240,72 +240,114 @@ def stream():
         return jsonify({"error": "查询不能为空"})
 
     def generate():
-        """生成流式响应"""
-        import queue
-        import threading
+            """生成流式响应"""
+            import queue
+            import threading
 
-        # 创建一个队列来在线程间传递数据
-        data_queue = queue.Queue()
+            # 创建一个队列来在线程间传递数据
+            data_queue = queue.Queue()
 
-        # 发送初始消息
-        yield json.dumps(
-            {"type": "thinking", "content": "🤔 正在分析您的查询..."}
-        ) + "\n"
-
-        try:
-            # 创建回调函数来实时发送数据
-            def step_callback(data):
-                data_queue.put(json.dumps(data) + "\n")
-
-            # 在单独线程中执行分析
-            def run_analysis():
-                try:
-                    stream_agent = LLMStockAgent(
-                        news_api_key=None, model_name="qwen-flash"
-                    )
-                    result = stream_agent.analyze(
-                        user_query, max_steps=10, step_callback=step_callback
-                    )
-                    # 分析完成，发送结束信号
-                    data_queue.put(None)
-                except Exception as e:
-                    # 发送错误信息
-                    data_queue.put(
-                        json.dumps(
-                            {
-                                "type": "error",
-                                "content": f"分析过程中出现错误: {str(e)}",
-                            }
-                        )
-                        + "\n"
-                    )
-                    data_queue.put(None)
-
-            # 启动分析线程
-            analysis_thread = threading.Thread(target=run_analysis)
-            analysis_thread.start()
-
-            # 持续从队列中获取数据并发送
-            while True:
-                try:
-                    data = data_queue.get(timeout=300)  # 300秒超时
-                    if data is None:  # 结束信号
-                        break
-                    yield data
-                except queue.Empty:
-                    # 超时，发送错误信息
-                    yield json.dumps(
-                        {"type": "error", "content": "分析超时，请重试"}
-                    ) + "\n"
-                    break
-
-            # 等待分析线程完成
-            analysis_thread.join(timeout=5)
-        except Exception as e:
-            logger.error(f"流式分析出错: {str(e)}")
+            # 发送初始消息
             yield json.dumps(
-                {"type": "error", "content": f"分析过程中出现错误: {str(e)}"}
+                {"type": "thinking", "content": "🤔 正在分析您的查询..."}
             ) + "\n"
+
+            try:
+                # 创建回调函数来实时发送数据
+                def step_callback(data):
+                    """处理不同类型的流式数据"""
+                    if data.get("type") == "stream":
+                        # 大模型的流式文本输出
+                        data_queue.put(json.dumps({
+                            "type": "stream",
+                            "content": data["content"],
+                            "step": data.get("step", 1)
+                        }) + "\n")
+                    elif data.get("type") == "step_complete":
+                        # 步骤完成通知
+                        data_queue.put(json.dumps({
+                            "type": "step_complete",
+                            "content": data["content"],
+                            "step": data.get("step", 1)
+                        }) + "\n")
+                    elif data.get("type") == "tool":
+                        # 工具调用信息
+                        data_queue.put(json.dumps({
+                            "type": "tool",
+                            "content": data["content"]
+                        }) + "\n")
+                    elif data.get("type") == "final_start":
+                        # 最终分析开始
+                        data_queue.put(json.dumps({
+                            "type": "final_start",
+                            "content": data["content"]
+                        }) + "\n")
+                    elif data.get("type") == "final_stream":
+                        # 最终分析的流式输出
+                        data_queue.put(json.dumps({
+                            "type": "final_stream",
+                            "content": data["content"]
+                        }) + "\n")
+                    else:
+                        # 其他类型的数据
+                        data_queue.put(json.dumps(data) + "\n")
+
+                # 在单独线程中执行分析
+                def run_analysis():
+                    try:
+                        stream_agent = LLMStockAgent(
+                            news_api_key=news_api_key, model_name=openai_model
+                        )
+                        result = stream_agent.analyze(
+                            user_query, max_steps=10, step_callback=step_callback
+                        )
+                        # 分析完成，发送最终结果
+                        data_queue.put(json.dumps({
+                            "type": "final_complete",
+                            "content": "✅ 分析完成",
+                            "result": result
+                        }) + "\n")
+                        # 发送结束信号
+                        data_queue.put(None)
+                    except Exception as e:
+                        logger.error(f"分析过程中出现错误: {str(e)}")
+                        # 发送错误信息
+                        data_queue.put(
+                            json.dumps(
+                                {
+                                    "type": "error",
+                                    "content": f"分析过程中出现错误: {str(e)}",
+                                }
+                            )
+                            + "\n"
+                        )
+                        data_queue.put(None)
+
+                # 启动分析线程
+                analysis_thread = threading.Thread(target=run_analysis)
+                analysis_thread.start()
+
+                # 持续从队列中获取数据并发送
+                while True:
+                    try:
+                        data = data_queue.get(timeout=300)  # 300秒超时
+                        if data is None:  # 结束信号
+                            break
+                        yield data
+                    except queue.Empty:
+                        # 超时，发送错误信息
+                        yield json.dumps(
+                            {"type": "error", "content": "分析超时，请重试"}
+                        ) + "\n"
+                        break
+
+                # 等待分析线程完成
+                analysis_thread.join(timeout=5)
+            except Exception as e:
+                logger.error(f"流式分析出错: {str(e)}")
+                yield json.dumps(
+                    {"type": "error", "content": f"分析过程中出现错误: {str(e)}"}
+                ) + "\n"
 
     # 返回流式响应
     return Response(generate(), mimetype="application/x-ndjson")

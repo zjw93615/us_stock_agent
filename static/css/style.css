@@ -207,6 +207,91 @@ body {
     }
 }
 
+/* 流式显示样式 */
+.thinking-stream {
+    padding: 8px 12px;
+    margin: 4px 0;
+    background: rgba(108, 117, 125, 0.05);
+    border: 1px solid rgba(108, 117, 125, 0.2);
+    border-radius: 6px;
+    animation: fadeInUp 0.3s ease-out;
+}
+
+.stream-header {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 0.9em;
+}
+
+.stream-content {
+    font-family: 'Courier New', monospace;
+    font-size: 0.85em;
+    line-height: 1.4;
+    color: #212529;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: rgba(255, 255, 255, 0.8);
+    padding: 8px;
+    border-radius: 4px;
+    border-left: 3px solid #6c757d;
+    min-height: 20px;
+}
+
+/* 最终分析样式 */
+.thinking-final {
+    padding: 10px 15px;
+    margin: 8px 0;
+    background: rgba(40, 167, 69, 0.05);
+    border: 1px solid rgba(40, 167, 69, 0.2);
+    border-radius: 6px;
+    animation: fadeInUp 0.3s ease-out;
+}
+
+.final-header {
+    font-weight: 600;
+    color: #28a745;
+    margin-bottom: 10px;
+    font-size: 0.95em;
+}
+
+.final-content {
+    font-size: 0.9em;
+    line-height: 1.5;
+    color: #212529;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 10px;
+    border-radius: 4px;
+    border-left: 3px solid #28a745;
+    min-height: 25px;
+}
+
+/* 流式文本动画效果 */
+.stream-content::after {
+    content: '|';
+    animation: blink 1s infinite;
+    color: #6c757d;
+}
+
+.final-content::after {
+    content: '|';
+    animation: blink 1s infinite;
+    color: #28a745;
+}
+
+/* 当内容完成时隐藏光标 */
+.stream-content.completed::after,
+.final-content.completed::after {
+    display: none;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
 /* 可视化区域 */
 .visualization-area {
     margin: 20px;

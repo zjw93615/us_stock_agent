@@ -176,25 +176,49 @@ class LLMStockAgent:
 
         for step in range(max_steps):
             logger.info(f"执行分析步骤 {step+1}/{max_steps}")
-            # 调用大模型获取响应
-            logger.debug(f"向OpenAI发送请求，模型: {self.model_name}")
-            response = self.openai_client.chat.completions.create(
-                model=self.model_name, messages=self.conversation_history
+            # 调用大模型获取响应（使用流式API）
+            logger.debug(f"向OpenAI发送流式请求，模型: {self.model_name}")
+            
+            # 使用流式API调用
+            stream = self.openai_client.chat.completions.create(
+                model=self.model_name, 
+                messages=self.conversation_history,
+                stream=True
             )
 
-            # 统计token使用量
-            step_tokens = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            }
+            # 收集流式响应
+            llm_response = ""
+            step_tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            is_tool_call = False
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    content_chunk = chunk.choices[0].delta.content
+                    llm_response += content_chunk
+                    if "<tool_call>" in content_chunk.strip():
+                        logger.debug(f"发现工具调用标记: {content_chunk}")
+                        is_tool_call = True
+                    # 实时发送流式内容
+                    if not is_tool_call and step_callback and content_chunk.strip():
+                        step_callback({
+                            "type": "stream",
+                            "content": content_chunk,
+                            "step": step + 1
+                        })
+                
+                # 获取token使用统计（在最后一个chunk中）
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    step_tokens = {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": chunk.usage.completion_tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                    }
+            
             total_tokens_used += step_tokens["total_tokens"]
-
-            llm_response = response.choices[0].message.content
+            
             logger.info(
-                f"OpenAI API调用完成 - 步骤{step+1} Token使用: {step_tokens['prompt_tokens']} prompt + {step_tokens['completion_tokens']} completion = {step_tokens['total_tokens']} total"
+                f"OpenAI流式API调用完成 - 步骤{step+1} Token使用: {step_tokens['prompt_tokens']} prompt + {step_tokens['completion_tokens']} completion = {step_tokens['total_tokens']} total"
             )
-            logger.debug(f"收到OpenAI响应: {llm_response}")
+            logger.debug(f"收到完整OpenAI响应: {llm_response}")
             self.conversation_history.append(
                 {"role": "assistant", "content": llm_response}
             )
@@ -207,21 +231,13 @@ class LLMStockAgent:
             }
             steps.append(step_data)
 
-            # 实时发送思考过程
+            # 发送步骤完成通知
             if step_callback:
-                # 提取不包含工具调用标记的部分
-                clean_response = llm_response
-                tool_call_start = clean_response.find("<tool_call>")
-                if tool_call_start != -1:
-                    clean_response = clean_response[:tool_call_start].strip()
-
-                if clean_response.strip():
-                    step_callback(
-                        {
-                            "type": "thinking",
-                            "content": f"💭 步骤 {step+1}: {clean_response}",
-                        }
-                    )
+                step_callback({
+                    "type": "step_complete",
+                    "content": f"✅ 步骤 {step+1} 完成",
+                    "step": step + 1
+                })
 
             # 检查是否包含工具调用
             tool_call = self._parse_tool_call(llm_response)
@@ -348,19 +364,46 @@ class LLMStockAgent:
                 {"role": "user", "content": summary_prompt}
             )
 
-            response = self.openai_client.chat.completions.create(
-                model=self.model_name, messages=self.conversation_history
+            # 使用流式API进行最终总结
+            stream = self.openai_client.chat.completions.create(
+                model=self.model_name, 
+                messages=self.conversation_history,
+                stream=True
             )
 
-            # 统计最终总结的token使用量
-            final_tokens = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            }
+            # 收集流式响应
+            final_analysis = ""
+            final_tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+            
+            # 发送最终总结开始通知
+            if step_callback:
+                step_callback({
+                    "type": "final_start",
+                    "content": "📝 正在生成最终分析总结..."
+                })
+            
+            for chunk in stream:
+                if chunk.choices[0].delta.content is not None:
+                    content_chunk = chunk.choices[0].delta.content
+                    final_analysis += content_chunk
+                    
+                    # 实时发送最终分析的流式内容
+                    if step_callback and content_chunk.strip():
+                        step_callback({
+                            "type": "final_stream",
+                            "content": content_chunk
+                        })
+                
+                # 获取token使用统计
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    final_tokens = {
+                        "prompt_tokens": chunk.usage.prompt_tokens,
+                        "completion_tokens": chunk.usage.completion_tokens,
+                        "total_tokens": chunk.usage.total_tokens,
+                    }
+            
             total_tokens_used += final_tokens["total_tokens"]
-
-            final_analysis = response.choices[0].message.content
+            
             logger.info(
                 f"最终分析总结完成 - Token使用: {final_tokens['prompt_tokens']} prompt + {final_tokens['completion_tokens']} completion = {final_tokens['total_tokens']} total"
             )

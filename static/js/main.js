@@ -69,6 +69,8 @@ async function handleSubmit(event) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let finalResponse = null;
+        let currentStreamDiv = null;
+        let currentFinalDiv = null;
         
         while (true) {
             const { done, value } = await reader.read();
@@ -88,8 +90,32 @@ async function handleSubmit(event) {
                         stepDiv.className = 'thinking-step';
                         stepDiv.innerHTML = marked.parse(data.content);
                         thinkingSteps.appendChild(stepDiv);
+                        scrollToBottom();
+                    } else if (data.type === 'stream') {
+                        // 处理流式文本输出
+                        if (!currentStreamDiv) {
+                            currentStreamDiv = document.createElement('div');
+                            currentStreamDiv.className = 'thinking-stream';
+                            currentStreamDiv.style.maxHeight = '200px';
+                            currentStreamDiv.style.overflowY = 'auto';
+                            currentStreamDiv.innerHTML = `<div class="stream-header">💭 步骤 ${data.step} 分析中...</div><div class="stream-content"></div>`;
+                            thinkingSteps.appendChild(currentStreamDiv);
+                        }
                         
-                        // 滚动到底部
+                        const streamContent = currentStreamDiv.querySelector('.stream-content');
+                        streamContent.textContent += data.content;
+                        // 滚动到thinking-stream容器底部
+                        currentStreamDiv.scrollTop = currentStreamDiv.scrollHeight;
+                        scrollToBottom();
+                    } else if (data.type === 'step_complete') {
+                        // 步骤完成
+                        if (currentStreamDiv) {
+                            const streamHeader = currentStreamDiv.querySelector('.stream-header');
+                            streamHeader.innerHTML = `✅ 步骤 ${data.step} 完成`;
+                            const streamContent = currentStreamDiv.querySelector('.stream-content');
+                            streamContent.classList.add('completed'); // 隐藏光标
+                            currentStreamDiv = null; // 重置当前流式div
+                        }
                         scrollToBottom();
                     } else if (data.type === 'tool') {
                         // 添加工具调用信息
@@ -97,11 +123,36 @@ async function handleSubmit(event) {
                         toolDiv.className = 'thinking-tool';
                         toolDiv.innerHTML = marked.parse(data.content);
                         thinkingSteps.appendChild(toolDiv);
-                        
-                        // 滚动到底部
+                        scrollToBottom();
+                    } else if (data.type === 'final_start') {
+                        // 开始最终分析
+                        currentFinalDiv = document.createElement('div');
+                        currentFinalDiv.className = 'thinking-final';
+                        currentFinalDiv.innerHTML = `<div class="final-header">${marked.parse(data.content)}</div><div class="final-content"></div>`;
+                        thinkingSteps.appendChild(currentFinalDiv);
+                        scrollToBottom();
+                    } else if (data.type === 'final_stream') {
+                        // 最终分析的流式输出
+                        if (currentFinalDiv) {
+                            const finalContent = currentFinalDiv.querySelector('.final-content');
+                            finalContent.textContent += data.content;
+                            scrollToBottom();
+                        }
+                    } else if (data.type === 'final_complete') {
+                        // 分析完成
+                        if (currentFinalDiv) {
+                            const finalHeader = currentFinalDiv.querySelector('.final-header');
+                            finalHeader.innerHTML = '✅ 最终分析完成';
+                            // 将最终内容转换为markdown格式
+                            const finalContent = currentFinalDiv.querySelector('.final-content');
+                            const finalText = finalContent.textContent;
+                            finalContent.innerHTML = marked.parse(finalText);
+                            finalContent.classList.add('completed'); // 隐藏光标
+                            finalResponse = finalText;
+                        }
                         scrollToBottom();
                     } else if (data.type === 'final') {
-                        // 保存最终分析结果
+                        // 兼容旧版本的最终结果
                         finalResponse = data.content;
                     } else if (data.type === 'error') {
                         // 处理错误信息
@@ -109,8 +160,6 @@ async function handleSubmit(event) {
                         errorDiv.className = 'thinking-error';
                         errorDiv.innerHTML = `❌ ${marked.parse(data.content)}`;
                         thinkingSteps.appendChild(errorDiv);
-                        
-                        // 滚动到底部
                         scrollToBottom();
                     }
                 } catch (e) {
