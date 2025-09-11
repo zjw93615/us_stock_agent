@@ -1,5 +1,6 @@
 import os
 from typing import TypedDict, List, Dict, Optional
+from dotenv import load_dotenv
 from langchain.chat_models import ChatOpenAI
 from langchain.tools import Tool
 from langchain.utilities import SerpAPIWrapper
@@ -7,9 +8,8 @@ from langchain.prompts import PromptTemplate
 from langchain.chains import LLMChain
 from langgraph.graph import StateGraph, END
 
-# 设置API密钥（实际使用时建议通过环境变量加载）
-os.environ["OPENAI_API_KEY"] = "your-openai-api-key"
-os.environ["SERPAPI_API_KEY"] = "your-serpapi-api-key"
+# 加载环境变量
+load_dotenv()
 
 # 1. 定义状态结构：存储流程中的所有中间数据
 class AgentState(TypedDict):
@@ -27,16 +27,12 @@ class AgentComponents:
     def __init__(self):
         # 网络搜索工具
         self.search = SerpAPIWrapper()
-        self.tools = [
-            Tool(
-                name="Search",
-                func=self.search.run,
-                description="用于获取最新信息或需要实时数据的问题，如新闻、统计数据等"
-            )
-        ]
         
         # 初始化LLM
-        self.llm = ChatOpenAI(model_name="gpt-4", temperature=0.7)
+        self.llm = ChatOpenAI(
+            base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            model="qwen-plus"
+        )
         
         # 任务拆分链
         self.task_chain = LLMChain(
@@ -148,9 +144,9 @@ class AgentNodes:
         print(f"\n=== 生成补充任务 ===")
         evaluation = state["evaluation"]
         # 从评估结果中提取需要补充的内容
-       补充内容 = evaluation.replace("不足够: ", "").strip()
+        missing_info = evaluation.replace("不足够: ", "").strip()
         # 生成新任务（这里简化处理，直接将补充内容作为新任务）
-        new_tasks = [补充内容]
+        new_tasks = [missing_info]
         print(f"补充任务: {new_tasks}")
         return {**state, "tasks": new_tasks}
 

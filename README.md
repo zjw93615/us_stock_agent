@@ -120,7 +120,7 @@ python app.py
 
 ### 必需配置
 - `OPENAI_API_KEY`：OpenAI API密钥
-- `SERP_API_KEY`：SerpAPI密钥（用于网络搜索功能）
+- `SERPAPI_API_KEY`：SerpAPI密钥（用于网络搜索功能）
 
 ### 可选配置
 - `OPENAI_MODEL`：使用的AI模型（默认：qwen-flash）

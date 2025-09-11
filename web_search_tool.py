@@ -22,7 +22,7 @@ class WebSearchAndAnalysisTool(object):
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.google_api_key = os.getenv("GOOGLE_API_KEY")
         self.google_cse_id = os.getenv("GOOGLE_CSE_ID")
-        self.serp_api_key = os.getenv("SERP_API_KEY")
+        self.SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY")
         
         # 配置请求头
         self.headers = {
@@ -107,7 +107,7 @@ class WebSearchAndAnalysisTool(object):
         #         logger.warning(f"Google搜索失败: {str(e)}")
         
         # 3. SerpAPI搜索（如果配置了API）
-        if self.serp_api_key and len(all_results) < max_results:
+        if self.SERPAPI_API_KEY and len(all_results) < max_results:
             try:
                 serp_results = self._serpapi_search(query, max_results - len(all_results))
                 all_results.extend(serp_results)
@@ -249,7 +249,7 @@ class WebSearchAndAnalysisTool(object):
         try:
             import serpapi
             
-            client = serpapi.Client(api_key=self.serp_api_key)
+            client = serpapi.Client(api_key=self.SERPAPI_API_KEY)
             results_data = client.search({
                 'engine': 'google',
                 'q': query,
