@@ -17,13 +17,14 @@ class NewsTool(Tool):
                     "type": "str",
                     "description": "搜索关键词，通常是股票相关的新闻或是希望查询的新闻内容",
                 },
-                "from_date": {"type": "str", "description": "开始日期，格式YYYY-MM-DD"},
-                "to_date": {"type": "str", "description": "结束日期，格式YYYY-MM-DD"},
+                "period": {"type": "str", "description": "时间周期，例如'7d'表示7天内的新闻"},
+                # "from_date": {"type": "str", "description": "开始日期，格式YYYY-MM-DD"},
+                # "to_date": {"type": "str", "description": "结束日期，格式YYYY-MM-DD"},
             },
         )
 
-    def run(self, query: str, from_date: str, to_date: str) -> List[Dict]:
-        logger.info(f"获取新闻: 查询={query}, 开始日期={from_date}, 结束日期={to_date}")
+    def run(self, query: str, period: str) -> List[Dict]:
+        logger.info(f"获取新闻: 查询={query}, 时间周期={period}")
         from gnews import GNews
 
         try:
@@ -34,7 +35,7 @@ class NewsTool(Tool):
             # 设置语言和国家/地区
             google_news.language = "en"
             google_news.country = "US"  # 美国新闻源
-            google_news.period = "7d"  # 默认为7天内的新闻
+            google_news.period = period or "7d"  # 默认为7天内的新闻
             google_news.max_results = 20  # number of responses across a keyword
             # if(from_date and to_date):
             #     from datetime import datetime

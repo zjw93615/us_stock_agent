@@ -183,7 +183,8 @@ class LLMStockAgent:
             stream = self.openai_client.chat.completions.create(
                 model=self.model_name, 
                 messages=self.conversation_history,
-                stream=True
+                stream=True,
+                stream_options={"include_usage": True}
             )
 
             # 收集流式响应
@@ -191,27 +192,30 @@ class LLMStockAgent:
             step_tokens = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
             is_tool_call = False
             for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    content_chunk = chunk.choices[0].delta.content
-                    llm_response += content_chunk
-                    if "<tool_call>" in content_chunk.strip():
-                        logger.debug(f"发现工具调用标记: {content_chunk}")
-                        is_tool_call = True
-                    # 实时发送流式内容
-                    if not is_tool_call and step_callback and content_chunk.strip():
-                        step_callback({
-                            "type": "stream",
-                            "content": content_chunk,
-                            "step": step + 1
-                        })
+                # 安全检查：确保chunk有choices且不为空
+                if hasattr(chunk, 'choices') and chunk.choices and len(chunk.choices) > 0:
+                    if chunk.choices[0].delta.content is not None:
+                        content_chunk = chunk.choices[0].delta.content
+                        llm_response += content_chunk
+                        if "<tool_call>" in content_chunk.strip():
+                            logger.debug(f"发现工具调用标记: {content_chunk}")
+                            is_tool_call = True
+                        # 实时发送流式内容
+                        if not is_tool_call and step_callback and content_chunk.strip():
+                            step_callback({
+                                "type": "stream",
+                                "content": content_chunk,
+                                "step": step + 1
+                            })
                 
-                # 获取token使用统计（在最后一个chunk中）
+                # 获取token使用统计（只在有usage信息的chunk中更新）
                 if hasattr(chunk, 'usage') and chunk.usage:
                     step_tokens = {
                         "prompt_tokens": chunk.usage.prompt_tokens,
                         "completion_tokens": chunk.usage.completion_tokens,
                         "total_tokens": chunk.usage.total_tokens,
                     }
+                    logger.debug(f"获取到token统计: {step_tokens}")
             
             total_tokens_used += step_tokens["total_tokens"]
             
@@ -274,11 +278,11 @@ class LLMStockAgent:
                         }
                     )
                 elif tool_name == "get_news":
-                    ticker = tool_params.get("ticker", "")
+                    query = tool_params.get("query", "")
                     step_callback(
                         {
                             "type": "tool",
-                            "content": f"📰 正在获取 {ticker} 的最新新闻...",
+                            "content": f"📰 正在获取关于 {query} 的最新新闻...",
                         }
                     )
                 elif tool_name == "calculate_technical_indicators":
@@ -368,7 +372,8 @@ class LLMStockAgent:
             stream = self.openai_client.chat.completions.create(
                 model=self.model_name, 
                 messages=self.conversation_history,
-                stream=True
+                stream=True,
+                stream_options={"include_usage": True}
             )
 
             # 收集流式响应
@@ -383,24 +388,27 @@ class LLMStockAgent:
                 })
             
             for chunk in stream:
-                if chunk.choices[0].delta.content is not None:
-                    content_chunk = chunk.choices[0].delta.content
-                    final_analysis += content_chunk
-                    
-                    # 实时发送最终分析的流式内容
-                    if step_callback and content_chunk.strip():
-                        step_callback({
-                            "type": "final_stream",
-                            "content": content_chunk
-                        })
+                # 安全检查：确保chunk有choices且不为空
+                if hasattr(chunk, 'choices') and chunk.choices and len(chunk.choices) > 0:
+                    if chunk.choices[0].delta.content is not None:
+                        content_chunk = chunk.choices[0].delta.content
+                        final_analysis += content_chunk
+                        
+                        # 实时发送最终分析的流式内容
+                        if step_callback and content_chunk.strip():
+                            step_callback({
+                                "type": "final_stream",
+                                "content": content_chunk
+                            })
                 
-                # 获取token使用统计
+                # 获取token使用统计（只在有usage信息的chunk中更新）
                 if hasattr(chunk, 'usage') and chunk.usage:
                     final_tokens = {
                         "prompt_tokens": chunk.usage.prompt_tokens,
                         "completion_tokens": chunk.usage.completion_tokens,
                         "total_tokens": chunk.usage.total_tokens,
                     }
+                    logger.debug(f"最终总结获取到token统计: {final_tokens}")
             
             total_tokens_used += final_tokens["total_tokens"]
             
